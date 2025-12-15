@@ -1,0 +1,42 @@
+# -----------------------------------------------------------------------------
+# 1. 基础设置
+# -----------------------------------------------------------------------------
+
+cmake_minimum_required(VERSION 3.10)
+project(SymCpp CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# 设置可执行文件输出目录
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
+
+# -----------------------------------------------------------------------------
+# 2. 导入 SymEngine Submodule
+# -----------------------------------------------------------------------------
+
+# 这一行保持不变，它告诉 CMake 在 symengine 目录下找到并处理其 CMakeLists.txt
+add_subdirectory(symengine)
+
+# -----------------------------------------------------------------------------
+# 3. 本地项目配置和链接 (核心)
+# -----------------------------------------------------------------------------
+
+# 设置源文件
+set(SOURCES
+    main.cpp
+)
+
+# 添加可执行文件
+add_executable(SymCpp ${SOURCES})
+
+# 包含您自己的头文件目录
+target_include_directories(SymCpp PUBLIC 
+    ${PROJECT_SOURCE_DIR}/include 
+    ${PROJECT_SOURCE_DIR}/include/main
+)
+
+# **关键步骤：将 SymEngine 库链接到您的可执行文件**
+# 确保目标名称与 SymEngine 内部定义的库名称一致。
+# 通常是 symengine 或 symengine-core。
+target_link_libraries(SymCpp PUBLIC symengine)
