@@ -1,0 +1,23 @@
+# CMake 构建目录 (您通常命名为 'build')
+build/
+out/
+
+# IDE/CMakeLists 生成的临时目录和文件
+CMakeFiles/
+CMakeCache.txt
+.cmake/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# 目标文件和链接库文件
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.gch
