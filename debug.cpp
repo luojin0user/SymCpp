@@ -3,10 +3,30 @@
 #include <symengine/lambda_double.h>
 #include <symengine/symbol.h>
 #include <iostream>
+#include <boost/math/quadrature/gauss.hpp>
 
 using SymEngine::Expression;
 using SymEngine::LambdaDoubleVisitor;
 using SymEngine::vec_basic;
+
+using boost::math::quadrature::gauss;
+
+long double integrate_dim0(
+    std::function<long double(const long double *)> &f,
+    long double *x,
+    long double a,
+    long double b)
+{
+    boost::math::quadrature::gauss<long double, 15> quad;
+
+    return quad.integrate(
+        [&](long double t)
+        {
+            x[0] = t;
+            return f(x);
+        },
+        a, b);
+}
 
 int main()
 {
@@ -14,7 +34,7 @@ int main()
     Expression x("x");
 
     // 2. 构造表达式
-    Expression expr = SymEngine::sinh(x) * x;
+    Expression expr = SymEngine::sinh(x);
 
     // 3. 输入变量顺序（非常重要）
     vec_basic inputs;
@@ -36,4 +56,8 @@ int main()
     long double result = f(vals);
 
     std::cout << result << std::endl;
+
+    long double I = integrate_dim0(f, vals, 100, 100.1);
+
+    std::cout << I;
 }

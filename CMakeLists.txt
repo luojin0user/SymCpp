@@ -13,7 +13,7 @@ add_executable(SymCpp main.cpp)
 
 # 设置源文件 
 file(GLOB_RECURSE SRC_FILES
-    ${PROJECT_SOURCE_DIR}/src/*.cpp
+    # ${PROJECT_SOURCE_DIR}/src/*.cpp
 )
 target_sources(SymCpp PRIVATE ${SRC_FILES})
 
