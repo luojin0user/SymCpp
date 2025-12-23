@@ -1,15 +1,14 @@
 {
     "configurations": [
         {
-            "name": "gcc",
-            "includePath": [
-                "${workspaceFolder}/**"
-            ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
+            "name": "Linux",
+            "includePath": [],
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "gnu11",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "gcc-x64",
+            "compileCommands": "${workspaceFolder}/out/build/SymCpp/compile_commands.json"
         }
     ],
     "version": 4

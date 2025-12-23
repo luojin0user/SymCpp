@@ -1,4 +1,5 @@
 #include "RectangleCoil.hpp"
+#include "AllRegions.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -61,9 +62,18 @@ RectangleCoil::RectangleCoil(double outer_len_x, double outer_len_y, int Nt_per_
 
 void RectangleCoil::gen_all_regions()
 {
-    // plain = AllRegions(); ...
-    // 因缺少依赖，保留空实现或打印警告
-    std::cout << "[RectangleCoil::gen_all_regions] Warning: AllRegions class missing. Function skipped." << std::endl;
+    AllRegions allregions = AllRegions();
+
+    allregions.input_current_region("xoz", this->x_cl1, this->x_cl2, this->z_b, this->z_t, 1, this->Jr_xl);
+    allregions.input_current_region("xoz", this->x_cr1, this->x_cr2, this->z_b, this->z_t, 1, this->Jr_xr);
+
+    allregions.input_current_region("yoz", this->y_cl1, this->y_cl2, this->z_b, this->z_t, 1, this->Jr_yl);
+    allregions.input_current_region("yoz", this->y_cr1, this->y_cr2, this->z_b, this->z_t, 1, this->Jr_yr);
+
+    allregions.input_calculate_area(this->cal_xl, this->cal_xr, this->cal_zb, this->cal_zt, 1);
+
+    allregions.pre_process();
+    allregions.get_all_regions();
 }
 
 void RectangleCoil::set_Rcoil_loc(double x, double y, double z)

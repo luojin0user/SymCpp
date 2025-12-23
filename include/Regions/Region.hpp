@@ -18,69 +18,63 @@
 #include "EnumTypes.h"
 #include "Boundarys.hpp"
 
+#include "RegionsInput.hpp"
+
 class Region
 {
-public:
-    // --- Properties ---
-    int idx;
-    SymEngine::RCP<const SymEngine::Symbol> mu_r;
-    SymEngine::RCP<const SymEngine::Basic> J_r;
-
-    CaseType case_type;
+private:
     int boundary_status; // 存储边界类型
 
-    // 多态指针，指向具体实现 (BasicCase 子类)
-    std::shared_ptr<BasicCase> impl;
-
     // 边界管理对象
-    std::shared_ptr<Boundarys> boundarys;
-
-    // 储存所有区域的节点 (使用 shared_ptr 避免拷贝)
-    std::vector<std::shared_ptr<Region>> all_regions;
-
-    // 边界存在性标志 (True 代表该边界不存在/是开放的?, 根据 MATLAB注释: "如果为True，说明这个边界不存在")
-    // 实际上通常 Ln=True 意味着 IsNeighbor (有邻居)，所以该物理边界不存在。
-    bool Ln, Rn, Tn, Bn;
+    std::unique_ptr<Boundarys> boundarys;
 
     int all_regions_num;
-
-    // 所有邻接区域的数组
-    std::vector<bool> all_edge_regions;
-
-    // --- Methods ---
-    Region(int idx, CaseType type,
-           const std::vector<SymEngine::RCP<const SymEngine::Symbol>> &area,
-           int bc_type,
-           const std::vector<int> &top,
-           const std::vector<int> &bottom,
-           const std::vector<int> &left,
-           const std::vector<int> &right,
-           const std::vector<int> &ES_regions_idx,
-           int H_max, int N_max,
-           const SymEngine::RCP<const SymEngine::Symbol> &mu_r,
-           const SymEngine::RCP<const SymEngine::Basic> &J_r,
-           int all_regions_num);
-
-    virtual ~Region() = default;
 
     void set_boundary(const std::vector<int> &top,
                       const std::vector<int> &bottom,
                       const std::vector<int> &left,
                       const std::vector<int> &right,
-                      int bc_type);
+                      BC_TYPE bc_type);
+
+public:
+    CaseType case_type;
+
+    // 储存所有区域的节点
+    const std::vector<std::unique_ptr<Region>> *all_regions;
+
+    // 所有邻接区域的数组
+    std::vector<std::pair<bool, int>> all_edge_regions;
+
+    // 多态指针，指向具体实现 (BasicCase 子类)
+    std::unique_ptr<BasicCase> impl;
+
+    // Q矩阵最后处在BCxx矩阵中的位置（大的行），记录的当前idx的所有邻接的edge(c0 c d0 d e f)在对应的矩阵的位置（值）
+    int BCxx_loc[6] = {-1, -1, -1, -1, -1, -1};
+
+    // --- Methods ---
+    Region(int idx,
+           CaseType type,
+           const Rect &area,
+           BC_TYPE bc_type,
+
+           const std::vector<int> &top,
+           const std::vector<int> &bottom,
+           const std::vector<int> &left,
+           const std::vector<int> &right,
+
+           const std::vector<int> &ES_regions_idx,
+           int H_max, int N_max,
+           float mu_r,
+           float J_r,
+           int all_regions_num);
+
+    virtual ~Region() = default;
 
     // 返回方程组 {eq_A_z, eq_B_x}
-    std::vector<SymEngine::RCP<const SymEngine::Basic>> get_region_solution_func();
+    void get_region_solution_func();
 
     // 生成系数方程
-    // 返回值: tuple<系数方程列表, 位置映射, 源项方程>
-    // funcs: 这里为了通用性，将 cell 数组展平或按组返回
-    struct CoefficientResult
-    {
-        std::vector<std::vector<SymEngine::RCP<const SymEngine::Basic>>> funcs;
-        std::map<int, std::pair<int, int>> BCfuncs_loc_map;
-        std::vector<SymEngine::RCP<const SymEngine::Basic>> ESfuncs;
-    };
+    void gen_region_coefficient_func(const std::vector<std::unique_ptr<Region>> *all_regions);
 
-    CoefficientResult gen_region_coefficient_func(const std::vector<std::shared_ptr<Region>> &all_regions);
+    void cal_BCxx_loc();
 };

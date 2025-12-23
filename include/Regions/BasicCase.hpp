@@ -7,11 +7,15 @@
 #include <symengine/symengine_rcp.h>
 #include <vector>
 #include <string>
+#include <array>
 
-// 为了不改变您的命名习惯，不使用额外的命名空间包裹类，直接定义
+#include "EnumTypes.h"
+
 class BasicCase
 {
 public:
+    const Region_Consts const_vals;
+
     // --- Properties (与 MATLAB 严格对应) ---
     SymEngine::RCP<const SymEngine::Symbol> x;
     SymEngine::RCP<const SymEngine::Symbol> y;
@@ -19,61 +23,89 @@ public:
     int idx; // MATLAB: idx
 
     // --- 公共编号变量 ---
-    SymEngine::RCP<const SymEngine::Symbol> xr;
-    SymEngine::RCP<const SymEngine::Symbol> xl;
-    SymEngine::RCP<const SymEngine::Symbol> yt;
-    SymEngine::RCP<const SymEngine::Symbol> yl;
+    SymEngine::RCP<const SymEngine::Basic> xr;
+    SymEngine::RCP<const SymEngine::Basic> xl;
+    SymEngine::RCP<const SymEngine::Basic> yt;
+    SymEngine::RCP<const SymEngine::Basic> yl;
 
     // tau_x, tau_y 是计算结果，使用 Basic 类型
     SymEngine::RCP<const SymEngine::Basic> tau_x;
     SymEngine::RCP<const SymEngine::Basic> tau_y;
 
-    // --- 公共函数 (作为成员变量存储的函数表达式) ---
-    // 这里保留变量名，具体类型取决于它们在子类中是矩阵还是单个表达式
-    // 暂时定义为 Basic，如果是矩阵后续可用 DenseMatrix
-    // MATLAB: T_funcs, B_funcs...
-
     // --- 公共求和指标 ---
-    SymEngine::RCP<const SymEngine::Symbol> h;
-    SymEngine::RCP<const SymEngine::Symbol> n;
+    SymEngine::RCP<const SymEngine::Basic> h;
+    SymEngine::RCP<const SymEngine::Basic> n;
 
     // --- 公共参数 ---
     SymEngine::RCP<const SymEngine::Basic> beta_h;
     SymEngine::RCP<const SymEngine::Basic> lambda_n;
     SymEngine::RCP<const SymEngine::Basic> mu_0;
-    SymEngine::RCP<const SymEngine::Symbol> mu_r; // 构造函数传入，通常视为符号
-
-    int H_max;
-    int N_max;
+    SymEngine::RCP<const SymEngine::Basic> mu_r; // 构造函数传入，通常视为符号
 
     // --- 边界积分项 ---
-    SymEngine::RCP<const SymEngine::Symbol> c_0x;
-    SymEngine::RCP<const SymEngine::Symbol> d_0x;
-    SymEngine::RCP<const SymEngine::Basic> c_hx; // 可能会被置 0，所以用 Basic
+    SymEngine::RCP<const SymEngine::Basic> c_0x;
+    SymEngine::RCP<const SymEngine::Basic> d_0x;
+    SymEngine::RCP<const SymEngine::Basic> c_hx;
     SymEngine::RCP<const SymEngine::Basic> d_hx;
     SymEngine::RCP<const SymEngine::Basic> e_ny;
     SymEngine::RCP<const SymEngine::Basic> f_ny;
 
-    // 边界邻接区域逻辑变量
-    bool Ln, Rn, Tn, Bn;
+    // 边界函数
+    std::vector<Boundary_Funcs> B_funcs;
+    std::vector<Boundary_Funcs> T_funcs;
+    std::vector<Boundary_Funcs> L_funcs;
+    std::vector<Boundary_Funcs> R_funcs;
+
+    // 有源项函数 (ES_funcs)
+    std::vector<SymEngine::RCP<const SymEngine::Basic>> T_ESfuncs;
+    std::vector<SymEngine::RCP<const SymEngine::Basic>> B_ESfuncs;
+    std::vector<SymEngine::RCP<const SymEngine::Basic>> L_ESfuncs;
+    std::vector<SymEngine::RCP<const SymEngine::Basic>> R_ESfuncs;
+
+    // 有源区域标记，有源为true
+    std::vector<bool> ES_regions;
 
     int num_coeffs;
-    // coeffs_exists 等数组逻辑建议在 C++ 中用 std::vector<int>
+    // 系数存在性 (coeffs_exists)
+    std::vector<int> coeffs_exists;
+
+    // 磁势和磁场表达式
+    SymEngine::RCP<const SymEngine::Basic> A_zx_expr;
+    SymEngine::RCP<const SymEngine::Basic> A_zy_expr;
+
+    SymEngine::RCP<const SymEngine::Basic> B_x_x;
+    SymEngine::RCP<const SymEngine::Basic> B_x_y;
+    SymEngine::RCP<const SymEngine::Basic> B_y_x;
+    SymEngine::RCP<const SymEngine::Basic> B_y_y;
+
+    /***********下面这两个是计算的结果，会被外部调用*********** */
+
+    // 边界方程存储 (使用嵌套 vector 存储方程)
+    // 结构: [row][col] -> Equation
+    std::array<std::vector<std::array<Integral_Func, 6>>, 6> eq_BC;
+
+    // 用于储存邻接区域edge_idx对应上面方程的坐标位置，eq_BC_loc下标即为edge_idx，值为坐标，bool代表是否有c0/d0
+    std::vector<std::tuple<int, int, bool>> eq_BC_loc;
+
+    // 所有的ES，可能有6个边界（当前区域的c0 c d0 d e f），内部可能有多个，需要后面进行相加，外面则是根据边界分开的
+    std::array<std::vector<Integral_Func>, 6> eq_ES;
 
     // --- Methods ---
-    BasicCase(int idx,
-              const SymEngine::RCP<const SymEngine::Symbol> &xl,
-              const SymEngine::RCP<const SymEngine::Symbol> &xr,
-              const SymEngine::RCP<const SymEngine::Symbol> &yl,
-              const SymEngine::RCP<const SymEngine::Symbol> &yt,
-              int H_max, int N_max,
-              const SymEngine::RCP<const SymEngine::Symbol> &mu_r);
+    BasicCase(Region_Consts &c);
 
     virtual ~BasicCase() = default;
 
-    void apply_boundaries(bool Ln, bool Rn, bool Tn, bool Bn);
+    // 虚函数
+    virtual void gen_solution_func() = 0;
+    virtual void gen_coefficient_func() = 0;
 
-    // 虚函数，对应 MATLAB 中报错 "子类必须实现..."
-    virtual void gen_solution_func(bool Ln, bool Rn, bool Tn, bool Bn);
-    virtual void gen_coefficient_func();
+    void gen_integral(const std::vector<Boundary_Funcs> &BC_func,
+                      const std::vector<SymEngine::RCP<const SymEngine::Basic>> &BC_ESfunc,
+                      int BTLR, // 指示上下左右，1开始
+                      std::vector<std::array<Integral_Func, 6UL>> &eq,
+                      std::vector<Integral_Func> &eq_ES,
+                      std::vector<std::array<Integral_Func, 6UL>> *eq_c0d0 = nullptr);
+
+private:
+    void apply_boundaries();
 };

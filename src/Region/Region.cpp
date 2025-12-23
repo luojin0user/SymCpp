@@ -1,5 +1,13 @@
 #include "Region.hpp"
+#include "RegionsInput.hpp"
 #include <iostream>
+#include <unordered_map>
+#include "EnumTypes.h"
+
+#include "AlleyAir.hpp"
+#include "BTAir.hpp"
+#include "FerriteCurrent.hpp"
+#include "NormalAir.hpp"
 
 // 使用命名空间以便于访问 SymEngine 类
 using SymEngine::Basic;
@@ -7,74 +15,60 @@ using SymEngine::RCP;
 using SymEngine::Symbol;
 
 Region::Region(int idx, CaseType type,
-               const std::vector<RCP<const Symbol>> &area,
-               int bc_type,
+               const Rect &area,
+               BC_TYPE bc_type,
+
                const std::vector<int> &top,
                const std::vector<int> &bottom,
                const std::vector<int> &left,
                const std::vector<int> &right,
+
                const std::vector<int> &ES_regions_idx,
+
                int H_max, int N_max,
-               const RCP<const Symbol> &mu_r,
-               const RCP<const Basic> &J_r,
+               float mu_r,
+               float J_r,
                int all_regions_num)
 {
     // L/R/T/B 为 bool 值，表示边界是否存在，如果为True，说明这个边界不存在(即有邻居)
     // obj.Ln = isempty(left);
-    this->Ln = left.empty();
-    this->Rn = right.empty();
-    this->Tn = top.empty();
-    this->Bn = bottom.empty();
+    Region_Consts c;
+    c.idx = idx;
+    c.rect = area;
+    c.H_max = H_max;
+    c.N_max = N_max;
+    c.mu_r = mu_r;
+    c.J_r = J_r;
+    c.all_regions_num = all_regions_num;
+
+    c.set_Boundarys(top.empty(), bottom.empty(), left.empty(), right.empty());
 
     this->case_type = type;
-    this->idx = idx;
-
-    // xl = area(1); ...
-    // C++ vector index starts at 0
-    if (area.size() < 4)
-        throw std::runtime_error("Area vector must have 4 elements [xl, xr, yl, yt]");
-    RCP<const Symbol> xl = area[0];
-    RCP<const Symbol> xr = area[1];
-    RCP<const Symbol> yl = area[2];
-    RCP<const Symbol> yt = area[3];
 
     // Factory Pattern Implementation
     switch (type)
     {
     case CaseType::AlleyAir:
-        this->impl = std::make_shared<AlleyAir>(idx, xl, xr, yl, yt, this->Ln, this->Rn, this->Tn, this->Bn, H_max, N_max, mu_r);
+        this->impl = std::make_unique<AlleyAir>(c);
         break;
     case CaseType::BTAir: // NormalAir logic in MATLAB comments?
-        this->impl = std::make_shared<BTAir>(idx, xl, xr, yl, yt, this->Ln, this->Rn, this->Tn, this->Bn, H_max, N_max, mu_r);
+        this->impl = std::make_unique<BTAir>(c);
         break;
     case CaseType::NormalAir:
-        this->impl = std::make_shared<NormalAir>(idx, xl, xr, yl, yt, this->Ln, this->Rn, this->Tn, this->Bn, H_max, N_max, mu_r);
+        this->impl = std::make_unique<NormalAir>(c);
         break;
     case CaseType::FerriteCurrent:
-        this->impl = std::make_shared<FerriteCurrent>(idx, xl, xr, yl, yt, this->Ln, this->Rn, this->Tn, this->Bn, H_max, N_max, mu_r, J_r);
+        this->impl = std::make_unique<FerriteCurrent>(c);
         break;
     case CaseType::Aluminum:
-        // Assuming Aluminum class signature matches others
-        this->impl = std::make_shared<Aluminum>(idx, xl, xr, yl, yt, this->Ln, this->Rn, this->Tn, this->Bn, H_max, N_max, mu_r);
+        // this->impl = std::make_unique<Aluminum>(idx, this->Ln, this->Rn, this->Tn, this->Bn, H_max, N_max, mu_r);
         break;
     default:
         throw std::runtime_error("Unsupported case type");
     }
 
-    // obj.impl.num_idx_hn = zeros(all_regions_num, 2, 'uint32');
-    // 假设 BasicCase 中定义了该成员。由于它是动态添加的属性，我们在C++基类中可能没有定义。
-    // 如果 BasicCase.hpp 中没有定义这些成员，这里会报错。
-    // 假设在 BasicCase 中补充定义了:
-    // std::vector<std::pair<int, int>> num_idx_hn; (size initialized here)
-    // this->impl->num_idx_hn.resize(all_regions_num, {0, 0});
-
-    // obj.impl.BCfuncs_loc_map = zeros(2, all_regions_num); -> std::map in our previous impl
-    // this->impl->BCfuncs_loc_map.clear(); // Map naturally handles "sparse" zeros
-
-    // obj.impl.ES_regions = false(1, all_regions_num);
     this->impl->ES_regions.assign(all_regions_num, false);
 
-    // obj.impl.ES_regions(ES_regions) = true;
     for (int es_idx : ES_regions_idx)
     {
         if (es_idx >= 0 && es_idx < all_regions_num)
@@ -85,11 +79,7 @@ Region::Region(int idx, CaseType type,
 
     this->all_regions_num = all_regions_num;
 
-    // obj.boundarys = Boundarys(obj, all_regions_num);
-    // Passing 'this' to Boundarys constructor usually requires enable_shared_from_this if we want to pass shared_ptr,
-    // or just pass raw pointer/reference. Assuming Boundarys takes a reference or pointer to Region.
-    this->boundarys = std::make_shared<Boundarys>(this, all_regions_num);
-
+    this->boundarys = std::make_unique<Boundarys>(this, this->all_regions_num);
     this->set_boundary(top, bottom, left, right, bc_type);
 }
 
@@ -97,164 +87,102 @@ void Region::set_boundary(const std::vector<int> &top,
                           const std::vector<int> &bottom,
                           const std::vector<int> &left,
                           const std::vector<int> &right,
-                          int bc_type)
+                          BC_TYPE bc_type)
 {
-    // obj.boundarys.bottom = bottom; ...
     this->boundarys->bottom = bottom;
     this->boundarys->top = top;
     this->boundarys->left = left;
     this->boundarys->right = right;
     this->boundarys->bc_type = bc_type;
 
-    // obj.impl.tops = top; ...
-    // Assuming Case1/Case2/BasicCase has these members (added in previous step)
-    // In C++, we need to cast if these are not in BasicCase, but we added them to Case1/2.
-    // However, 'impl' is shared_ptr<BasicCase>. We should ensure BasicCase has these or cast.
-    // In the previous strict C++ implementation, we put 'tops', 'bottoms' in Case1.
-    // So strictly we should dynamic_cast, but assuming BasicCase defines them virtually or we added them to BasicCase header:
-    // (In the previous turns, I added them to Case1.hpp. To be safe, let's assume BasicCase has them or we cast).
-
-    // Try to downcast to Case1 (where tops/bottoms were defined in previous turn)
-    if (auto case1_ptr = std::dynamic_pointer_cast<Case1>(this->impl))
-    {
-        case1_ptr->tops = top;
-        case1_ptr->bottoms = bottom;
-        case1_ptr->lefts = left;
-        case1_ptr->rights = right;
-    }
-    // If Aluminum inherits from Case1, this works.
-
     // obj.all_edge_regions = false(obj.all_regions_num, 1);
-    this->all_edge_regions.assign(this->all_regions_num, false);
-
-    // regions = [top, bottom, left, right];
-    std::vector<int> regions;
-    regions.insert(regions.end(), top.begin(), top.end());
-    regions.insert(regions.end(), bottom.begin(), bottom.end());
-    regions.insert(regions.end(), left.begin(), left.end());
-    regions.insert(regions.end(), right.begin(), right.end());
+    all_edge_regions.resize(all_regions_num);
+    for (int i = 0; i < this->all_regions_num; i++)
+        this->all_edge_regions[i] = {false, -1};
 
     // obj.all_edge_regions(regions) = true;
-    for (int r_idx : regions)
-    {
-        if (r_idx >= 0 && r_idx < this->all_regions_num)
-        {
-            this->all_edge_regions[r_idx] = true;
-        }
-    }
+    for (int r_idx : bottom)
+        this->all_edge_regions[r_idx] = {true, 1};
+    for (int r_idx : top)
+        this->all_edge_regions[r_idx] = {true, 3};
+    for (int r_idx : left)
+        this->all_edge_regions[r_idx] = {true, 4};
+    for (int r_idx : right)
+        this->all_edge_regions[r_idx] = {true, 5};
+
+    cal_BCxx_loc();
 }
 
-std::vector<RCP<const Basic>> Region::get_region_solution_func()
+// 计算这个区域内部的方程，这里直接返回这个方程，计算过程由set_boundary中的obj.impl.gen_region完成
+void Region::get_region_solution_func()
 {
     // obj.impl.gen_solution_func();
     // Using the overloaded version or default based on previous impl
-    this->impl->gen_solution_func(this->Ln, this->Rn, this->Tn, this->Bn);
+    this->impl->gen_solution_func();
 
     // region_func = {obj.impl.eq_A_z, obj.impl.eq_B_x};
-    // Need to access these fields. If they are in Case1/Case2, need cast or accessors.
-    // Assuming they are promoted to BasicCase or we cast.
-    // In previous Case1/2 impl, eq_A_z is public.
-
-    std::vector<RCP<const Basic>> ret;
-    if (auto c1 = std::dynamic_pointer_cast<Case1>(this->impl))
-    {
-        ret.push_back(c1->eq_A_z);
-        ret.push_back(c1->eq_B_x);
-    }
-    else if (auto c2 = std::dynamic_pointer_cast<Case2>(this->impl))
-    {
-        ret.push_back(c2->eq_A_z);
-        ret.push_back(c2->eq_B_x);
-    }
-
-    return ret;
 }
 
-Region::CoefficientResult Region::gen_region_coefficient_func(const std::vector<std::shared_ptr<Region>> &all_regions)
+// 计算这个区域系数的方程，这里是在所有区域内部方程计算完成之后调用的
+void Region::gen_region_coefficient_func(const std::vector<std::unique_ptr<Region>> *all_regions)
 {
+    // 首先需要计算这个区域的边界的情况，需要使用boundays.cal_BC方法，边界方程的计算需要用到所有的区域
     this->all_regions = all_regions;
 
-    // obj.impl.all_regions = all_regions;
-    // We need to pass the shared_ptr<BasicCase> from the Region to the impl's all_regions list.
-    // This requires converting vector<shared_ptr<Region>> to vector<shared_ptr<BasicCase>>
-    // inside the impl logic, OR the impl stores weak_ptr<Region>.
-    // Assuming impl has: std::vector<std::shared_ptr<BasicCase>> all_regions;
-    // We update the impl's view of the world.
+    this->boundarys->cal_BC(this->impl->const_vals.Ln, this->impl->const_vals.Rn,
+                            this->impl->const_vals.Tn, this->impl->const_vals.Bn);
 
-    std::vector<std::shared_ptr<BasicCase>> impl_regions;
-    for (const auto &r : all_regions)
-    {
-        impl_regions.push_back(r->impl);
-    }
+    // 这里会返回所有边界方程的数据
+    this->boundarys->rtn_BC_funcs(this->impl->T_funcs, this->impl->B_funcs, this->impl->L_funcs, this->impl->R_funcs);
+    this->boundarys->rtn_ES_funcs(this->impl->T_ESfuncs, this->impl->B_ESfuncs, this->impl->L_ESfuncs, this->impl->R_ESfuncs);
 
-    // Downcast to access 'all_regions' member of Case1/Case2
-    if (auto c1 = std::dynamic_pointer_cast<Case1>(this->impl))
-    {
-        c1->all_regions = impl_regions;
-    }
-
-    // obj.boundarys.cal_BC(...)
-    this->boundarys->cal_BC(this->Ln, this->Rn, this->Tn, this->Bn);
-
-    // obj.impl.gen_coefficient_func();
     this->impl->gen_coefficient_func();
 
-    // Collect results
-    CoefficientResult result;
+    // 这里需要组合所有c0 c d0 d e f方程，方程的定义在BasicCase中
+    // std::array<std::vector<std::array<Integral_Func, 6>>, 6> eq_BC;
+    // 每个Integral_Func结构体里面储存了邻接区域的编号信息
+    // 直接被调用
+    return;
+}
 
-    // funcs = [obj.impl.eq_c0x; obj.impl.eq_c_hx; obj.impl.eq_d0x; obj.impl.eq_d_hx; obj.impl.eq_e_ny; obj.impl.eq_f_ny];
-    // In our C++ impl, eq_c0x is vector<RCP>, eq_c_hx is vector<vector<RCP>> etc.
-    // We need to standardize the output structure.
+void Region::cal_BCxx_loc()
+{
+    int curr_loc = -1;
+    int curr_region = 0;
 
-    // For simplicity here, assuming specific Cast to Case1 (which covers Case2 structure mostly)
-    if (auto c1 = std::dynamic_pointer_cast<Case1>(this->impl))
+    // 用于指示边界位置（BTLR 0123）对应在BCxx中的位置
+    // 理论上的位置就是c0 c d0 d e f，如果哪个没有出现那么就删去
+    // 是否出现的flag存在coeffs_exists中
+    std::unordered_map<int, int> row_exists_idx;
+    int counter = 0;
+    for (int j = 0; j < this->impl->coeffs_exists.size(); j++)
     {
-        // Since eq_c_hx is vector<vector>, and eq_c0x is vector, we push distinct groups.
-        // Or we flatten everything into one huge vector.
-        // MATLAB [A; B] concatenates.
-
-        // Helper to append 2D vectors
-        auto append_2d = [&](const std::vector<std::vector<RCP<const Basic>>> &src)
+        if (this->impl->coeffs_exists[j])
         {
-            result.funcs.insert(result.funcs.end(), src.begin(), src.end());
-        };
-        // Helper to append 1D vectors (wrapped as rows)
-        auto append_1d = [&](const std::vector<RCP<const Basic>> &src)
-        {
-            result.funcs.push_back(src);
-        };
-
-        // Case1 specific logic might differ from Case2 structure slightly in C++ class defs,
-        // but here is the general idea based on MATLAB code order:
-
-        // Note: In Case2, eq_c0x is vector<RCP>. In Case1 it might be cell(1,6) -> vector.
-        // We need to handle the types carefully.
-
-        if (auto c2 = std::dynamic_pointer_cast<Case2>(this->impl))
-        {
-            // Case 2 logic
-            append_1d(c2->eq_c0x);
-            append_1d(c2->eq_c_hx); // In Case2 impl, eq_c_hx was 1D vector
-            append_1d(c2->eq_d0x);
-            append_1d(c2->eq_d_hx);
-            append_1d(c2->eq_e_ny);
-            append_1d(c2->eq_f_ny);
+            // 如果这个边界存在，记录下这个的位置
+            row_exists_idx[j] = counter++;
         }
-        else
-        {
-            // Case 1 logic
-            // In Case1 impl, eq_c0x was not used/defined as member in provided C++ snippet,
-            // but eq_c_hx was vector<vector>.
-            // Using generic access or dynamic check:
-            append_2d(c1->eq_c_hx);
-            append_2d(c1->eq_d_hx);
-            append_1d(c1->eq_e_ny);
-            append_1d(c1->eq_f_ny);
-        }
-
-        result.BCfuncs_loc_map = c1->BCfuncs_loc_map;
-        result.ESfuncs = c1->eq_ES;
     }
 
-    return result;
+    // 对于所有的边界
+    for (int i = 0; i < all_edge_regions.size(); i++)
+    {
+        // 存在这个边界，如果没有删去放在 .second行
+        if (all_edge_regions[i].first)
+        {
+            auto find_row_idx = row_exists_idx.find(all_edge_regions[i].second);
+            if (find_row_idx != row_exists_idx.end())
+            {
+                // 如果这个边界存在，记录下这个的位置
+                BCxx_loc[all_edge_regions[i].second] = find_row_idx->second; // 顺序
+            }
+
+            // 处理有源项目
+            if (this->case_type == CaseType::FerriteCurrent &&
+                (all_edge_regions[i].second == 1 || all_edge_regions[i].second == 3))
+            {
+                BCxx_loc[all_edge_regions[i].second - 1] = find_row_idx->second - 1;
+            }
+        }
+    }
 }

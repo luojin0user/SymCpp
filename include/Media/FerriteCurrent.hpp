@@ -14,16 +14,8 @@ class FerriteCurrent : public Case2
 {
 public:
     // 构造函数直接在头文件中实现
-    FerriteCurrent(int idx,
-                   const SymEngine::RCP<const SymEngine::Symbol> &xl,
-                   const SymEngine::RCP<const SymEngine::Symbol> &xr,
-                   const SymEngine::RCP<const SymEngine::Symbol> &yl,
-                   const SymEngine::RCP<const SymEngine::Symbol> &yt,
-                   bool Ln, bool Rn, bool Tn, bool Bn,
-                   int H_max, int N_max,
-                   const SymEngine::RCP<const SymEngine::Symbol> &mu_r,
-                   const SymEngine::RCP<const SymEngine::Basic> &J_r)
-        : Case2(idx, xl, xr, yl, yt, Ln, Rn, Tn, Bn, H_max, N_max, mu_r, J_r)
+    FerriteCurrent(Region_Consts &c)
+        : Case2(c)
     {
         // 局部使用命名空间，防止污染
         using SymEngine::add;
