@@ -150,7 +150,9 @@ void AllRegions::splice_BC(Matrix2D &BC_xoz, Matrix2D &BC_yoz)
 
     printf("开始计算BC矩阵，共%d个\n", N);
 
+#ifdef OPENMP
 #pragma omp parallel for
+#endif
     for (int i = 0; i < N; ++i)
     {
         for (int j = 0; j < N; ++j)
@@ -218,6 +220,16 @@ void AllRegions::splice_BC(Matrix2D &BC_xoz, Matrix2D &BC_yoz)
 
         row_s += all_len_IC[region_num_xoz + i];
     }
+
+    for (int i = 0; i < BC_xoz.rows(); i++)
+    {
+        BC_xoz.at(i, i) = 1.0;
+    }
+
+    for (int i = 0; i < BC_yoz.rows(); i++)
+    {
+        BC_yoz.at(i, i) = 1.0;
+    }
 }
 
 // 计算出一个BCxx
@@ -238,6 +250,9 @@ void AllRegions::splice_BCxx(int idx, int edge_idx, Matrix2D &BCxx)
 
     const auto &loc = idx_impl->eq_BC_loc[edge_idx];
     const auto &funcs = idx_impl->eq_BC[std::get<0>(loc)][std::get<1>(loc)];
+
+    // 判断当前区域是否为有源区域，如果是，那么需要写入2行
+    auto has_cd0 = std::get<2>(loc);
 
     // 需要找到这个邻接区域在BCxx中的位置，即第几行开始
 
@@ -299,7 +314,7 @@ void AllRegions::splice_BCxx(int idx, int edge_idx, Matrix2D &BCxx)
         }
 
         SymEngine::LambdaDoubleVisitor<long double> visitor;
-        // std::cout << *expr << std::endl;
+        std::cout << *expr << std::endl;
         visitor.init(inputs, *expr);
 
         auto f = visitor.apply(*expr);
@@ -317,8 +332,67 @@ void AllRegions::splice_BCxx(int idx, int edge_idx, Matrix2D &BCxx)
                 long double h_val = static_cast<long double>(row + 1);
                 long double n_val = static_cast<long double>(col + 1);
 
-                BCxx.at(row + row_bais, col + col_bais) = integrate_dim0_param(f, vars, a, b, h_val, n_val);
+                BCxx.at(row + row_bais, col + col_bais) = -integrate_dim0_param(f, vars, a, b, h_val, n_val);
                 // BCxx[row + row_bais][col + col_bais] = integrate_dim0_param(f, vars, a, b, h_val, n_val);
+            }
+        }
+
+        if (has_cd0)
+        {
+            // 如果有的话，找到上一个方程的位置，这个也就是对应的c0/d0
+            // 理论上来说。cd0只会有一个方程
+            const auto &funcs = idx_impl->eq_BC[std::get<0>(loc) - 1][0];
+            row_hn = idx_impl->h;
+            row_num = 1;
+            // 然后计算cd0的值，这个由后面进行计算，计算完之后，插入到cd的前面
+
+            // 如果当前这个不存在，那么继续找下一个
+            if (!edge_impl->coeffs_exists[j])
+                continue;
+
+            // 对面区域的h n及其数量
+            if (j <= 3)
+            {
+                col_hn = edge_impl->h;
+                col_num = edge_impl->const_vals.H_max;
+            }
+            else
+            {
+                col_hn = edge_impl->n;
+                col_num = edge_impl->const_vals.N_max;
+            }
+
+            // 循环计算
+            auto expr = funcs[j].funcs;
+            double a = funcs[j].start_int;
+            double b = funcs[j].end_int;
+
+            // 转成std::function
+            SymEngine::vec_basic inputs;
+            inputs.push_back(funcs[j].x);
+            inputs.push_back(col_hn);
+
+            SymEngine::LambdaDoubleVisitor<long double> visitor;
+
+            visitor.init(inputs, *expr);
+
+            auto f = visitor.apply(*expr);
+            long double vars[3];
+
+            // 相对于BCxx的偏移量
+            // len_IC_start[idx]指示的是这个区域的所有位置的
+            unsigned row_bais = len_IC_start[idx][regions[idx]->BCxx_loc[std::get<0>(loc) - 1]];
+            unsigned col_bais = len_IC_start[edge_idx][regions[edge_idx]->BCxx_loc[j]];
+
+            for (int row = 0; row < row_num; row++)
+            {
+                for (int col = 0; col < col_num; col++)
+                {
+                    long double h_val = static_cast<long double>(row + 1);
+                    long double n_val = static_cast<long double>(col + 1);
+
+                    BCxx.at(row + row_bais, col + col_bais) = -integrate_dim0_param(f, vars, a, b, h_val, n_val);
+                }
             }
         }
     }

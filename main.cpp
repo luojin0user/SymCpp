@@ -12,16 +12,18 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// #define OPENMP
+
 int main()
 {
 
-#pragma omp parallel
-    {
-#pragma omp single
-        std::cout << "Threads: "
-                  << omp_get_num_threads()
-                  << std::endl;
-    }
+    // #pragma omp parallel
+    //     {
+    // #pragma omp single
+    //         std::cout << "Threads: "
+    //                   << omp_get_num_threads()
+    //                   << std::endl;
+    //     }
 
     // 1. 计时开始 (tic)
     auto start_time = std::chrono::high_resolution_clock::now();

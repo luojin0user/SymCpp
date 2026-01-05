@@ -99,12 +99,12 @@ public:
     virtual void gen_solution_func() = 0;
     virtual void gen_coefficient_func() = 0;
 
-    void gen_integral(const std::vector<Boundary_Funcs> &BC_func,
-                      const std::vector<SymEngine::RCP<const SymEngine::Basic>> &BC_ESfunc,
-                      int BTLR, // 指示上下左右，1开始
-                      std::vector<std::array<Integral_Func, 6UL>> &eq,
-                      std::vector<Integral_Func> &eq_ES,
-                      std::vector<std::array<Integral_Func, 6UL>> *eq_c0d0 = nullptr);
+    virtual void gen_integral(const std::vector<Boundary_Funcs> &BC_func,
+                              const std::vector<SymEngine::RCP<const SymEngine::Basic>> &BC_ESfunc,
+                              int BTLR, // 指示上下左右，1开始
+                              std::vector<std::array<Integral_Func, 6UL>> &eq,
+                              std::vector<Integral_Func> &eq_ES,
+                              std::vector<std::array<Integral_Func, 6UL>> *eq_c0d0 = nullptr) = 0;
 
 private:
     void apply_boundaries();

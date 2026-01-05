@@ -39,7 +39,14 @@ target_include_directories(SymCpp PRIVATE
     ${PROJECT_SOURCE_DIR}/include/Boundarys
 )
 
-target_link_libraries(SymCpp PRIVATE symengine gmp OpenMP::OpenMP_CXX Eigen3::Eigen)
+option(ENABLE_OPENMP "Enable OpenMP" ON)
+
+if(ENABLE_OPENMP)
+    find_package(OpenMP REQUIRED)
+    target_link_libraries(SymCpp PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+target_link_libraries(SymCpp PRIVATE symengine gmp Eigen3::Eigen)
 
 
 target_compile_options(SymCpp PRIVATE

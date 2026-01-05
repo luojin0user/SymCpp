@@ -93,3 +93,95 @@ void Case2::gen_coefficient_func()
     if (!this->const_vals.Rn)
         this->gen_integral(R_funcs, R_ESfuncs, 4, eq_BC[4], eq_ES[4]);
 }
+
+void Case2::gen_integral(const std::vector<Boundary_Funcs> &BC_func,
+                         const std::vector<SymEngine::RCP<const SymEngine::Basic>> &BC_ESfunc,
+                         int BTLR, // 指示上下左右，1开始
+                         std::vector<std::array<Integral_Func, 6UL>> &eq,
+                         std::vector<Integral_Func> &eq_ES,
+                         std::vector<std::array<Integral_Func, 6UL>> *eq_c0d0)
+{
+
+    eq.resize(BC_func.size());
+
+    RCP<const Basic> coeff;
+    RCP<const Basic> sincos_term;
+    RCP<const Basic> x_or_y;
+
+    RCP<const Basic> coeff0;
+
+    if (BTLR == 1 || BTLR == 3)
+    {
+        coeff = div(integer(2), this->tau_x);
+        sincos_term = cos(mul(this->beta_h, sub(this->x, this->xl)));
+        x_or_y = this->x;
+
+        if (eq_c0d0 != nullptr)
+        {
+            eq_c0d0->resize(BC_func.size());
+            // 还需要考虑c0或者d0
+            coeff0 = mul(mul(div(integer(1), this->tau_x), div(integer(1), this->tau_y)), div(integer(1), this->beta_h));
+        }
+    }
+    else
+    {
+        coeff = div(integer(2), this->tau_y);
+        sincos_term = sin(mul(this->lambda_n, sub(this->y, this->yl)));
+        x_or_y = this->y;
+    }
+
+    for (size_t row = 0; row < BC_func.size(); row++)
+    {
+        size_t row_ES = 0;
+
+        // row是对每个邻接区域的分段函数，col是对这个邻接区域的的c0 c d0 d e f
+        // 对于分段函数的积分上下限，是对应的邻接区域的上下限，而不是当前区域的上下限
+        // 首先找到对应临界区域
+        const auto &rect = BC_func[row].rect;
+        const int edge_idx = BC_func[row].idx;
+
+        float int_start;
+        float int_end;
+
+        // 积分限
+        if (BTLR == 1 || BTLR == 3)
+        {
+            int_start = std::max(rect.xl, this->const_vals.rect.xl);
+            int_end = std::min(rect.xr, this->const_vals.rect.xr);
+        }
+        else
+        {
+            int_start = std::max(rect.yb, this->const_vals.rect.yb);
+            int_end = std::min(rect.yt, this->const_vals.rect.yt);
+        }
+
+        for (size_t col = 0; col < BC_func[row].funcs.size(); col++)
+        {
+            if (BC_func[row].funcs[col].is_null())
+                continue;
+
+            RCP<const Basic> integrand = mul(BC_func[row].funcs[col], sincos_term);
+            RCP<const Basic> expr = mul(coeff, integrand); // 积分项
+
+            eq[row][col] = Integral_Func(edge_idx, expr, x_or_y, int_start, int_end);
+
+            if (eq_c0d0 != nullptr)
+            {
+                expr = mul(BC_func[row].funcs[col], coeff0); // 积分项
+                (*eq_c0d0)[row][col] = Integral_Func(edge_idx, expr, x_or_y, int_start, int_end);
+            }
+        }
+
+        // BTLR B-c T-d L-e R-f
+        eq_BC_loc[edge_idx] = {BTLR, row, eq_c0d0 != nullptr};
+
+        // 处理这个区域的ES情况
+        if (this->ES_regions[edge_idx])
+        {
+            RCP<const Basic> es_integrand = mul(BC_ESfunc[row_ES++], sincos_term);
+            RCP<const Basic> es_expr = mul(coeff, es_integrand);
+            // 这里可能是多个不同的积分项相加，因此分别储存所有项目，最后计算的时候再相加
+            eq_ES.push_back(Integral_Func(edge_idx, es_expr, x_or_y, int_start, int_end));
+        }
+    }
+}

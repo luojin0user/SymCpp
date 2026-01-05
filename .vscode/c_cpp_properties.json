@@ -8,7 +8,7 @@
             "cStandard": "gnu11",
             "cppStandard": "gnu++14",
             "intelliSenseMode": "gcc-x64",
-            "compileCommands": "${workspaceFolder}/out/build/SymCpp/compile_commands.json"
+            "compileCommands": "${workspaceFolder}/build/debug/compile_commands.json"
         }
     ],
     "version": 4
